@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="11"/>
+    <PathDelim Value="\"/>
+    <General>
+      <Flags>
+        <MainUnitHasCreateFormStatements Value="False"/>
+        <MainUnitHasScaledStatement Value="False"/>
+      </Flags>
+      <SessionStorage Value="InProjectDir"/>
+      <MainUnit Value="0"/>
+      <Title Value="MR-Tool"/>
+      <UseAppBundle Value="False"/>
+      <ResourceType Value="res"/>
+    </General>
+    <BuildModes Count="1">
+      <Item1 Name="Debug" Default="True"/>
+    </BuildModes>
+    <PublishOptions>
+      <Version Value="2"/>
+      <UseFileFilters Value="True"/>
+    </PublishOptions>
+    <RunParams>
+      <FormatVersion Value="2"/>
+      <Modes Count="0"/>
+    </RunParams>
+    <RequiredPackages Count="3">
+      <Item1>
+        <PackageName Value="vampyreimagingpackage_ext"/>
+      </Item1>
+      <Item2>
+        <PackageName Value="VampyreImagingPackage"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="LCL"/>
+      </Item3>
+    </RequiredPackages>
+    <Units Count="2">
+      <Unit0>
+        <Filename Value="mrtool.lpr"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="MRTool"/>
+      </Unit0>
+      <Unit1>
+        <Filename Value="engine\mrimage.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="MRImage"/>
+      </Unit1>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <PathDelim Value="\"/>
+    <Target>
+      <Filename Value="..\bin\mr-tool"/>
+    </Target>
+    <SearchPaths>
+      <IncludeFiles Value="$(ProjOutDir);$(LazarusDir)\customlibs\imaginglib\Source;$(LazarusDir)\customlibs\imaginglib\Source\ZLib;$(LazarusDir)\customlibs\imaginglib\Source\JpegLib"/>
+      <Libraries Value="$(LazarusDir)\customlibs\imaginglib\Extras\Extensions\J2KObjects;$(LazarusDir)\customlibs\imaginglib\Extras\Extensions\LibTiff\Compiled"/>
+      <OtherUnitFiles Value="engine"/>
+      <UnitOutputDirectory Value="..\lib\$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+    <Parsing>
+      <SyntaxOptions>
+        <IncludeAssertionCode Value="True"/>
+      </SyntaxOptions>
+    </Parsing>
+    <CodeGeneration>
+      <Checks>
+        <IOChecks Value="True"/>
+        <RangeChecks Value="True"/>
+        <OverflowChecks Value="True"/>
+        <StackChecks Value="True"/>
+      </Checks>
+      <VerifyObjMethodCallValidity Value="True"/>
+    </CodeGeneration>
+    <Linking>
+      <Debugging>
+        <DebugInfoType Value="dsDwarf2Set"/>
+        <UseHeaptrc Value="True"/>
+        <TrashVariables Value="True"/>
+        <UseExternalDbgSyms Value="True"/>
+      </Debugging>
+    </Linking>
+    <Other>
+      <CustomOptions Value="-dDEBUG"/>
+    </Other>
+  </CompilerOptions>
+  <Debugging>
+    <Exceptions Count="3">
+      <Item1>
+        <Name Value="EAbort"/>
+      </Item1>
+      <Item2>
+        <Name Value="ECodetoolError"/>
+      </Item2>
+      <Item3>
+        <Name Value="EFOpenError"/>
+      </Item3>
+    </Exceptions>
+  </Debugging>
+</CONFIG>
