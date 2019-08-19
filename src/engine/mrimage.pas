@@ -73,10 +73,28 @@ unit MRImage;
   {$UNDEF DEBUG_MRIMAGE_UNIT}
 {$ENDIF}
 
+{$IFDEF FPC}
+  {$I ImagingOptions.inc}
+{$ENDIF}
+
 interface
 
 uses
-  SysUtils, Classes, Graphics;
+  SysUtils,
+  Classes,
+  Graphics
+{$IFDEF FPC}
+  ,
+  Interfaces,
+  ImagingTypes,
+  Imaging,
+  ImagingClasses,
+  ImagingComponents,
+  ImagingCanvases,
+  ImagingBinary,
+  ImagingUtility
+{$ENDIF}
+  ;
 
 const
   CoreVersion = '1.0';
@@ -164,8 +182,10 @@ function SameMRColor(MRColor1, MRColor2: TMRColor): Boolean;
 
 implementation
 
+{$IFNDEF FPC}
 uses
   Vcl.Consts, Jpeg, PngImage, JvGif;
+{$ENDIF}
 
 const
   MR_HEADER_ID            = 'MR';
@@ -177,6 +197,11 @@ const
 
   IP_HEADER_ID            = 'SEGA SEGAKATANA SEGA ENTERPRISES';
   IP_MR_OFFSET            = $3820;
+
+{$IFDEF FPC}
+  BITMAP_FORMAT           = 'BMP';
+  SUnknownExtension       = 'Unknown picture file extension (.%s)';
+{$ENDIF}
 
 {$IFDEF DEBUG}
 var
@@ -609,6 +634,32 @@ begin
 end;
 
 function TMRFile.LoadFromPictureFormat(const FileName: TFileName): Boolean;
+{$IFDEF FPC}
+var
+  ImageData: TImageData;
+  MemoryStream: TMemoryStream;
+
+begin
+  Imaging.InitImage(ImageData);
+  MemoryStream := TMemoryStream.Create;
+  try
+    try
+      Result := Imaging.LoadImageFromFile(FileName, ImageData);
+      Result := Result
+        and Imaging.SaveImageToStream(BITMAP_FORMAT, MemoryStream, ImageData);
+      MemoryStream.Seek(0, soFromBeginning);
+      fSourceBitmap.LoadFromStream(MemoryStream, MemoryStream.Size);
+    except
+      on E:EMRFile do
+        raise;
+      on E:Exception do
+        raise EMRFile.Create('LoadFromPictureFormat: Generic Error (' + E.ClassName + '): ' + E.Message);
+    end;
+  finally
+    MemoryStream.Free;
+    Imaging.FreeImage(ImageData);
+  end;
+{$ELSE}
 var
   Picture: TPicture;
 
@@ -631,6 +682,7 @@ begin
   finally
     Picture.Free;
   end;
+{$ENDIF}
 end;
 
 procedure TMRFile.Render(DestinationBitmap: TBitmap);
@@ -753,6 +805,38 @@ begin
 end;
 
 procedure TMRFile.SaveToPictureFormat(const FileName: TFileName);
+{$IFDEF FPC}
+var
+  ImageData: TImageData;
+  MemoryStream: TMemoryStream;
+  Ext: string;
+
+begin
+  Imaging.InitImage(ImageData);
+  MemoryStream := TMemoryStream.Create;
+  try
+    try
+      fSourceBitmap.SaveToStream(MemoryStream);
+      MemoryStream.Seek(0, soFromBeginning);
+      Imaging.LoadImageFromStream(MemoryStream, ImageData);
+      if not Imaging.SaveImageToFile(FileName, ImageData) then
+      begin
+        DeleteFile(FileName);
+        Ext := ExtractFileExt(FileName);
+        Delete(Ext, 1, 1);
+        raise EInvalidGraphic.CreateFmt(SUnknownExtension, [Ext]);
+      end;
+    except
+      on E:EMRFile do
+        raise;
+      on E:Exception do
+        raise EMRFile.Create('SaveToPictureFormat: Generic Error (' + E.ClassName + '): ' + E.Message);
+    end;
+  finally
+    MemoryStream.Free;
+    Imaging.FreeImage(ImageData);
+  end;
+{$ELSE}
 type
   TFileFormat = record
     GraphicClass: TGraphicClass;
@@ -803,6 +887,7 @@ begin
   finally
     NewGraphic.Free;
   end;
+{$ENDIF}
 end;
 
 {$IFDEF DEBUG_MRIMAGE_UNIT}
