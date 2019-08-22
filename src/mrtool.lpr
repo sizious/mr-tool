@@ -46,9 +46,11 @@ begin
   { add your program here }
   MRFile := TMRFile.Create;
   try
-    MRFile.LoadFromFile('wince.mr');
+    MRFile.LoadFromFile('iplogo.mr');
+    MRFile.SaveToFile('iplogo.png');
     MRFile.SaveToFile('iplogo.gif');
-    MRFile.SaveToFile('iplogo.mr');
+    MRFile.SaveToFile('iplogo.jpg');
+    MRFile.SaveToFile('iplogo.dib');
   finally
     MRFile.Free;
   end;

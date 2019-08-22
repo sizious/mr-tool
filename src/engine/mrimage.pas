@@ -88,10 +88,8 @@ uses
   Interfaces,
   ImagingTypes,
   Imaging,
-  ImagingClasses,
   ImagingComponents,
   ImagingCanvases,
-  ImagingBinary,
   ImagingUtility
 {$ENDIF}
   ;
@@ -104,12 +102,15 @@ type
   EMRFile                   = class(Exception);
   // MR file is too big to fit in the bootstrap (IP.BIN), (max is 8192 Bytes)
   EMRFileTooBigForBootstrap = class(EMRFile);
-  // The width of the MR file is to large (max is 320)
+  // The width of the MR file is too large (max is 320)
   EMRFileWidthToLarge       = class(EMRFile);
-  // The height of the MR file is to large (max is 90)
+  // The height of the MR file is too large (max is 90)
   EMRFileHeightToLarge      = class(EMRFile);
-  // The MR file has to much colors in the palette (max is 128)
+  // The MR file has too much colors in the palette (max is 128)
   EMRFileTooMuchColors       = class(EMRFile);
+
+  // Used to read file to compare with IP_HEADER_ID
+  TBootstrapID = array[0..31] of AnsiChar;
 
   // Header of the MR file (30 Bytes)
   TMRHeader = packed record
@@ -297,7 +298,7 @@ begin
     end;
 
 {$IFDEF DEBUG_MRIMAGE_UNIT}
-    DebugLog.SaveToFile('Palette.log');
+    DebugLog.SaveToFile('Palette.csv');
 {$ENDIF}
 end;
 
@@ -313,11 +314,12 @@ end;
 
 procedure TMRFile.Compress;
 var
-  Position, Run: LongWord;
+  Position, Run: Int64;
   Buffer1, Buffer2: Byte;
 
   function _GetByte: Byte;
   begin
+    Result := $00;
     fDecompressedData.Read(Result, 1);
     fDecompressedData.Seek(-1, soFromCurrent);
   end; // _GetByte
@@ -392,6 +394,10 @@ begin
   fCompressedData.Seek(0, soFromBeginning);
   fDecompressedData.Clear;
 
+  Buffer1 := $00;
+  Buffer2 := $00;
+  Buffer3 := $00;
+
 {$IFDEF DEBUG_MRIMAGE_UNIT}
   DebugLog.Clear;
   DebugLog.Add('Key;Run;ByteWritten');
@@ -440,7 +446,7 @@ begin
     end else begin
       // if the value > $82 : Decode the number of points present in Run
       Run := Buffer1 - $80;
-      fCompressedData.Read(Buffer1, 1); // codés sur un seul octet
+      fCompressedData.Read(Buffer1, 1); // Encoded only on 1 byte
 
 {$IFDEF DEBUG_MRIMAGE_UNIT}
       DebugLog.Add('+$82;' + IntToStr(Run) + ';' + IntToStr(Ord(Buffer1)));
@@ -456,7 +462,7 @@ begin
   fDecompressedData.Seek(0, soFromBeginning);
 
 {$IFDEF DEBUG_MRIMAGE_UNIT}
-  DebugLog.SaveToFile('DecompressedAlgorithm.log');
+  DebugLog.SaveToFile('DecompressedAlgorithm.csv');
 {$ENDIF}
 
   // After this code, DecompressedData.Size will be (Bitmap.Height * Bitmap.Width) + 1
@@ -478,6 +484,8 @@ var
   CurrentPoint: TMRColor;
 
 begin
+  Buffer := $00;
+
   fDecompressedData.Seek(0, soFromBeginning);
 
   for y := 0 To fSourceBitmap.Height - 1 do // loop the y coordinates
@@ -487,7 +495,7 @@ begin
       fDecompressedData.Read(Buffer, 1);
 
       if Buffer > fPalette.Count then
-        // Fix for WinCE (extracted from MR Writer, thx Fackue)
+        // Fix for WinCE logo (extracted from MR Writer, thx Fackue)
         CurrentPoint := fPalette.Colors[0]
       else
         // Normal point
@@ -500,11 +508,19 @@ end;
 
 function TMRFile.LoadFromBootstrap(InputStream: TStream): Boolean;
 var
-  BootstrapID: array[0..31] of AnsiChar;
+  BootstrapID: TBootstrapID;
   Header: TMRHeader;
 
 begin
   Result := False;
+
+{$IFDEF FPC}
+  BootstrapID := Default(TBootstrapID);
+  Header := Default(TMRHeader);
+{$ENDIF}
+  FillByte(BootstrapID, SizeOf(TBootstrapID), $00);
+  FillByte(Header, SizeOf(TMRHeader), $00);
+
   InputStream.Seek(0, soFromBeginning);
   InputStream.Read(BootstrapID, SizeOf(BootstrapID));
   if SameText(string(BootstrapID), IP_HEADER_ID) then
@@ -525,6 +541,11 @@ var
 begin
   Result := False;
   if not FileExists(FileName) then Exit;
+
+{$IFDEF FPC}
+  Header := Default(TMRHeader);
+{$ENDIF}
+  FillByte(Header, SizeOf(TMRHeader), $00);
 
   ConvertFromAnotherFormat := False;
   FileStream := TFileStream.Create(FileName, fmOpenRead);
@@ -693,10 +714,16 @@ end;
 function TMRFile.SaveToBootstrap(FileName: TFileName): Boolean;
 var
   FileStream: TFileStream;
-  BootstrapID: array[0..31] of AnsiChar;
+  BootstrapID: TBootstrapID;
 
 begin
   Result := False;
+
+{$IFDEF FPC}
+  BootstrapID := Default(TBootstrapID);
+{$ENDIF}
+  FillByte(BootstrapID, SizeOf(BootstrapID), $00);
+
   if FileExists(FileName) then
   begin
     FileStream := TFileStream.Create(FileName, fmOpenReadWrite);
@@ -762,7 +789,10 @@ begin
     Compress;
 
     // Initializing Header
-    FillChar(Header, SizeOf(TMRHeader), #0);
+{$IFDEF FPC}
+    Header := Default(TMRHeader);
+{$ENDIF}
+    FillByte(Header, SizeOf(TMRHeader), $00);
     StrCopy(Header.ID, MR_HEADER_ID);
     Header.Width := fSourceBitmap.Width;
     Header.Height := fSourceBitmap.Height;
