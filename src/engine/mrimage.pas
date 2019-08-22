@@ -1,11 +1,11 @@
 (*
-  MRTool Core by [big_fury]SiZiOUS <http://sbibuilder.shorturl.com/>
+  MRTool Core by SiZiOUS <http://www.sizious.com/>
   This source is licensed under the GNU GPL 3.
 
   Convert a normal picture file into a special format ('.MR') for use in a Sega
-  Dreamcast Bootstrap file (aka IP.BIN).
+  Dreamcast Bootstrap file (a.k.a. IP.BIN).
 
-  Image size should be 320x90 or less and colors must be less than 128.
+  Image size should be 320 * 90 or less and colors must be less than 128.
   The output 'MR' file must be less than 8192 bytes to fit in a "normal" IP.BIN.
 
   Usage:
@@ -23,9 +23,14 @@
   Portion of code from "pngtomr" by ADK/Napalm <andrewk@napalm-x.com>
   Portion of code from "MR Writer 0.3" by fackue <http://dchelp.dcemulation.com>
 
-  By the way, where are you gentlemens ... ?
+  By the way, where are you gentlemens...?
 
   --- History changes ---
+
+  2019-08-22: Version 1.1
+    - The MRImage code is now compatible with Free Pascal/Lazarus (FPC).
+      Note: To compile this code under FPC, you should have the Vampyre Imaging
+      Library installed <http://imaginglib.sourceforge.net/>.
 
   2012-10-21: Version 1.0
     - *** COMPLETE REWRITE OF THE CODE!!! *** (under Delphi XE2)
@@ -95,7 +100,7 @@ uses
   ;
 
 const
-  CoreVersion = '1.0';
+  CoreVersion = '1.1';
 
 type
   // Generic Exception
