@@ -143,9 +143,15 @@ type
     Count     : Integer;
   end;
 
+  TMRMode = (mmConvert, mmStrip);
+
   // Main class
+
+  { TMRFile }
+
   TMRFile = class(TObject)
   private
+    fMode: TMRMode;
     fSourceBitmap: TBitmap;
     fCompressedData,
     fDecompressedData: TMemoryStream;
@@ -153,6 +159,7 @@ type
     fPalette: TMRPalette;
     fLoadedFileName: TFileName;
     fFileLoaded: TNotifyEvent;
+    fBootstrapLoaded: Boolean;
     procedure BuildPalette;
     procedure Compress;
     procedure Decompress;
@@ -163,6 +170,8 @@ type
     function SaveToBootstrap(FileName: TFileName): Boolean;
     procedure SaveToMR(OutputStream: TStream);
     procedure SaveToPictureFormat(const FileName: TFileName);
+    procedure StripBootstrap(OutputStream: TStream);
+    function OpenBootstrapStream(const FileName: TFileName): TFileStream;
   public
     constructor Create;
     destructor Destroy; override;
@@ -178,6 +187,7 @@ type
     property Loaded: Boolean read fLoaded;
     // Loaded FileName...
     property LoadedFileName: TFileName read fLoadedFileName;
+    property Mode: TMRMode read fMode write fMode;
     // Event when loaded with success an image file
     property OnFileLoaded: TNotifyEvent read fFileLoaded write fFileLoaded;
   end;
@@ -315,6 +325,7 @@ begin
   fPalette.Count := 0;
   fLoadedFileName := '';
   fSourceBitmap.Assign(nil);
+  fBootstrapLoaded := False;
 end;
 
 procedure TMRFile.Compress;
@@ -381,6 +392,7 @@ end;
 
 constructor TMRFile.Create;
 begin
+  fMode := mmConvert;
   fSourceBitmap := TBitmap.Create;
   fSourceBitmap.PixelFormat := pf24bit;
   fCompressedData := TMemoryStream.Create;
@@ -565,9 +577,11 @@ begin
       if SameText(string(Header.ID), MR_HEADER_ID) then
       begin
         // The target file is MR (direct), handling it.
-        fLoaded := LoadFromMR(FileStream, Header)
-
-      end else begin
+        fLoaded := LoadFromMR(FileStream, Header);
+        fBootstrapLoaded := fLoaded;
+      end
+      else
+      begin
 
         // The target file isn't MR. Maybe IP.BIN ?
         // So MR is embedded in the IP.BIN ?
@@ -719,31 +733,18 @@ end;
 function TMRFile.SaveToBootstrap(FileName: TFileName): Boolean;
 var
   FileStream: TFileStream;
-  BootstrapID: TBootstrapID;
 
 begin
   Result := False;
-
-{$IFDEF FPC}
-  BootstrapID := Default(TBootstrapID);
-{$ENDIF}
-  FillByte(BootstrapID, SizeOf(BootstrapID), $00);
-
-  if FileExists(FileName) then
+  FileStream := OpenBootstrapStream(FileName);
+  if Assigned(FileStream) then
   begin
-    FileStream := TFileStream.Create(FileName, fmOpenReadWrite);
     try
-      FileStream.Read(BootstrapID, SizeOf(BootstrapID));
-      if SameText(string(BootstrapID), IP_HEADER_ID) then
-      begin
-        // The signature of the file = IP.BIN
-        FileStream.Seek(IP_MR_OFFSET, soFromBeginning);
-        SaveToMR(FileStream);
-        Result := True;
-      end;
+      SaveToMR(FileStream);
     finally
       FileStream.Free;
     end;
+    Result := True;
   end;
 end;
 
@@ -751,33 +752,55 @@ procedure TMRFile.SaveToFile(FileName: TFileName);
 var
   FileStream: TFileStream;
   ConvertFromAnotherFormat: Boolean;
+  IsMRFileName: Boolean;
 
 begin
-  ConvertFromAnotherFormat := False;
+  IsMRFileName := SameText(ExtractFileExt(FileName), MR_FILE_EXTENSION);
 
-  // Save to IP.BIN if possible...?
-  if not SaveToBootstrap(FileName) then
-  begin
-    // Save to image (MR or other)
-    FileStream := TFileStream.Create(FileName, fmCreate);
-    try
+  case Mode of
+    mmConvert:
+      begin
+        ConvertFromAnotherFormat := False;
 
-      if SameText(ExtractFileExt(FileName), MR_FILE_EXTENSION) then
-        // Save to MR
-        SaveToMR(FileStream)
-      else
-        // Save to another format
-        ConvertFromAnotherFormat := True;
+        // Save to IP.BIN if possible...?
+        if not SaveToBootstrap(FileName) then
+        begin
+          // Save to image (MR or other)
+          FileStream := TFileStream.Create(FileName, fmCreate);
+          try
 
-    finally
-      FileStream.Free;
-    end;
+            if IsMRFileName then
+              // Save to MR
+              SaveToMR(FileStream)
+            else
+              // Save to another format
+              ConvertFromAnotherFormat := True;
 
-  end;
+          finally
+            FileStream.Free;
+          end;
 
-  // the format is other... (bmp, jpg, png or something else...)
-  if ConvertFromAnotherFormat then
-    SaveToPictureFormat(FileName);
+        end;
+
+        // the format is other... (bmp, jpg, png or something else...)
+        if ConvertFromAnotherFormat then
+          SaveToPictureFormat(FileName);
+      end; // Convert
+
+    mmStrip:
+      begin
+        FileStream := OpenBootstrapStream(FileName);
+        if Assigned(FileStream) then
+        begin
+          try
+            StripBootstrap(FileStream);
+          finally
+            FileStream.Free;
+          end;
+        end;
+      end; // Strip
+
+  end; // Mode
 end;
 
 procedure TMRFile.SaveToMR(OutputStream: TStream);
@@ -821,6 +844,9 @@ begin
       raise EMRFileTooBigForBootstrap.CreateFmt('MR file is too big to fit in '
         + 'the IP.BIN (it''s %d Bytes too big)', [Header.Size - MR_MAX_FILESIZE]);
 {$ENDIF}
+
+    // Stripping the old logo first (if any)
+    StripBootstrap(OutputStream);
 
     // Writing MR header
     OutputStream.Write(Header, SizeOf(TMRHeader));
@@ -923,6 +949,61 @@ begin
     NewGraphic.Free;
   end;
 {$ENDIF}
+end;
+
+procedure TMRFile.StripBootstrap(OutputStream: TStream);
+type
+  TEmptyBuffer = array[0..MR_MAX_FILESIZE - 1] of Byte;
+
+var
+  SavedPosition: Int64;
+  EmptyBuffer: TEmptyBuffer;
+
+begin
+  SavedPosition := OutputStream.Position;
+  OutputStream.Seek(IP_MR_OFFSET, soFromBeginning);
+{$IFDEF FPC}
+  EmptyBuffer := Default(TEmptyBuffer);
+{$ENDIF}
+  FillByte(EmptyBuffer, SizeOf(TEmptyBuffer), $00);
+  OutputStream.Write(EmptyBuffer, SizeOf(TEmptyBuffer));
+  OutputStream.Seek(SavedPosition, soFromBeginning);
+end;
+
+function TMRFile.OpenBootstrapStream(const FileName: TFileName): TFileStream;
+var
+  FileStream: TFileStream;
+  BootstrapID: TBootstrapID;
+
+begin
+  Result := nil;
+
+{$IFDEF FPC}
+  BootstrapID := Default(TBootstrapID);
+{$ENDIF}
+  FillByte(BootstrapID, SizeOf(BootstrapID), $00);
+
+  if FileExists(FileName) then
+  begin
+    FileStream := TFileStream.Create(FileName, fmOpenReadWrite);
+    try
+      FileStream.Read(BootstrapID, SizeOf(BootstrapID));
+      if SameText(string(BootstrapID), IP_HEADER_ID) then
+      begin
+        // The signature of the file = IP.BIN
+        // Note FileStream should be destroyed by the caller!
+        FileStream.Seek(IP_MR_OFFSET, soFromBeginning);
+        Result := FileStream;
+      end
+      else
+        FileStream.Free; // Close the file if not a bootstrap
+    except
+{$IFDEF DEBUG}
+      WriteLn('Open Bootstrap Failed!');
+{$ENDIF}
+      Result := nil;
+    end;
+  end;
 end;
 
 {$IFDEF DEBUG_MRIMAGE_UNIT}
